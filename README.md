@@ -1,4 +1,4 @@
-# High-Performance Asynchronous Web Scraper (Anti-Bot Bypass)
+# High-Performance Asynchronous Web Scraper 
 
 A production-ready, asynchronous web scraper built with **Python 3.10+**, **Playwright**, and **Asyncio**. Designed specifically to extract data from modern, dynamically rendered (React/Vue/Angular) websites while bypassing advanced anti-bot protection systems (Cloudflare, DataDome) and utilizing proxy rotation.
 
@@ -39,7 +39,7 @@ A production-ready, asynchronous web scraper built with **Python 3.10+**, **Play
 
 3.  **Install dependencies:**
     ```bash
-    pip install - fervor -r requirements.txt
+    pip install -r requirements.txt
     ```
 
 4.  **Install Playwright browser binaries:**
