@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 DB_NAME = "scraped_data.db"      # Имя файла базы данных SQLite
 TXT_FILE = "extracted_quotes.txt" # Имя текстового файла для отчета
 CSV_FILE = "products_data.csv"    # Имя CSV файла
-TARGET_URLS = [f"https://toscrape.com{i}/" for i in range(1, 4)]
+TARGET_URLS = [f"https://quotes.toscrape.com/page/{i}/" for i in range(1, 4)]
 
 def init_db():
     """Создание базы данных и таблицы (если они еще не созданы)"""
