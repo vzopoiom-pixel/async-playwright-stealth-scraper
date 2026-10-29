@@ -5,18 +5,18 @@ import sqlite3
 from playwright.async_api import async_playwright
 from fake_useragent import UserAgent
 
-# Настройка вывода логов в консоль
+# Configure console logging output
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- НАСТРОЙКИ ---
-DB_NAME = "scraped_data.db"      # Имя файла базы данных SQLite
-TXT_FILE = "extracted_quotes.txt" # Имя текстового файла для отчета
-CSV_FILE = "products_data.csv"    # Имя CSV файла
+# --- CONFIGURATION ---
+DB_NAME = "scraped_data.db"       # SQLite database file name
+TXT_FILE = "extracted_quotes.txt" # Plain text report file name
+CSV_FILE = "products_data.csv"    # CSV output file name
 TARGET_URLS = [f"https://quotes.toscrape.com/page/{i}/" for i in range(1, 4)]
 
 def init_db():
-    """Создание базы данных и таблицы (если они еще не созданы)"""
+    """Initialize database and table if not already created"""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -28,14 +28,14 @@ def init_db():
             )
         ''')
         conn.commit()
-    logger.info("База данных успешно инициализирована.")
+    logger.info("Database initialized successfully.")
 
 def save_to_db_and_txt(data: list):
-    """Сохранение полученных данных в SQLite и текстовый файл"""
+    """Save extracted data to SQLite and plain text summary"""
     if not data:
         return
 
-    # 1. Запись в базу данных SQLite (защита от дубликатов через IGNORE)
+    # 1. Save to SQLite database (duplicate prevention via IGNORE)
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         for item in data:
@@ -44,40 +44,40 @@ def save_to_db_and_txt(data: list):
                 (item["Author"], item["Quote"])
             )
         conn.commit()
-    logger.info(f"Данные ({len(data)} шт.) сохранены в базу данных {DB_NAME}.")
+    logger.info(f"Saved {len(data)} items to database {DB_NAME}.")
 
-    # 2. Запись в текстовый файл TXT
+    # 2. Write to plain text file
     with open(TXT_FILE, 'w', encoding='utf-8') as txt:
-        txt.write("=== СПИСОК СОБРАННЫХ ДАННЫХ ===\n\n")
+        txt.write("=== EXTRACTED DATA SUMMARY ===\n\n")
         for index, item in enumerate(data, 1):
-            txt.write(f"Запись №{index}\n")
-            txt.write(f"Автор: {item['Author']}\n")
-            txt.write(f"Цитата: {item['Quote']}\n")
+            txt.write(f"Record #{index}\n")
+            txt.write(f"Author: {item['Author']}\n")
+            txt.write(f"Quote: {item['Quote']}\n")
             txt.write("-" * 40 + "\n")
-    logger.info(f"Текстовый отчет записан в файл {TXT_FILE}.")
+    logger.info(f"Summary report written to file {TXT_FILE}.")
 
 async def parse_page(browser, url: str) -> list:
-    """Открытие одной страницы в изолированной сессии и сбор элементов"""
+    """Open single page in isolated session and extract elements"""
     ua = UserAgent()
     
-    # Создаем изолированный контекст браузера для каждой вкладки
+    # Create isolated browser context for each worker tab
     context = await browser.new_context(
         user_agent=ua.random,
         viewport={"width": 1920, "height": 1080}
     )
     
-    # Скрытие автоматизации (маскировка под реального пользователя)
+    # Mask automation flags to simulate human browsing
     await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
     page = await context.new_page()
     page_data = []
     
     try:
-        logger.info(f"Открываем страницу: {url}")
-        # Ожидаем полной загрузки сети (JS, AJAX, React)
+        logger.info(f"Navigating to page: {url}")
+        # Wait for network idle (ensures full React/Vue/AJAX rendering)
         await page.goto(url, wait_until="networkidle", timeout=30000)
         
-        # Поиск всех карточек на странице
+        # Query target elements on the page
         elements = await page.query_selector_all(".quote")
         
         for el in elements:
@@ -93,49 +93,49 @@ async def parse_page(browser, url: str) -> list:
             })
             
     except Exception as e:
-        logger.error(f"Ошибка при обработке страницы {url}: {str(e)}")
+        logger.error(f"Error while processing page {url}: {str(e)}")
     finally:
-        await context.close() # Закрываем сессию во избежание утечки памяти
+        await context.close() # Close session to prevent memory leaks
         
     return page_data
 
 async def main():
-    # Создаем или проверяем БД перед началом работы
+    # Initialize database before execution
     init_db()
     
-    logger.info("Запуск движка Playwright...")
+    logger.info("Launching Playwright engine...")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         
-        # Формируем пул задач для параллельного выполнения
+        # Construct task pool for concurrent execution
         tasks = [parse_page(browser, url) for url in TARGET_URLS]
         
-        logger.info("Запуск асинхронного парсинга страниц...")
-        # Передаем список задач и параметр обработки исключений
+        logger.info("Starting asynchronous page extraction...")
+        # Execute tasks in parallel with error handling
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         await browser.close()
         
-    # Объединяем списки данных со всех вкладок в один
+    # Aggregate data from all worker tasks
     all_data = []
     for res in results:
         if isinstance(res, list):
             all_data.extend(res)
             
     if all_data:
-        # Сохранение в БД и TXT
+        # Save to Database and Text summary
         save_to_db_and_txt(all_data)
         
-        # Корректное извлечение заголовков для CSV из первого словаря в списке
+        # Export structured data to CSV
         keys = all_data[0].keys()
         with open(CSV_FILE, 'w', newline='', encoding='utf-8-sig') as output_file:
             dict_writer = csv.DictWriter(output_file, fieldnames=keys)
             dict_writer.writeheader()
             dict_writer.writerows(all_data)
-        logger.info("🎉 Все данные успешно сохранены во все источники!")
+        logger.info("All data successfully stored across all destinations!")
     else:
-        logger.warning("Скрипт завершил работу, но данные для сохранения отсутствуют.")
+        logger.warning("Scraper finished, but no data was extracted.")
 
 if __name__ == "__main__":
-    # Запуск асинхронного цикла
+    # Run asyncio event loop
     asyncio.run(main())
